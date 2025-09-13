@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth/next"
 // @ts-ignore - Import with TypeScript ignore
-import { authOptions } from "./api/auth/[...nextauth]/route"
+import { authOptions } from "../api/auth/[...nextauth]/route"
 import { redirect } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,12 +31,12 @@ export default async function HomePage() {
           <div className="text-center">
             <p className="text-sm text-muted-foreground mb-4">Choose your role to get started</p>
             <div className="space-y-3">
-              <Link href="/auth/signin?role=seller" className="block">
+              <Link href="/api/auth/signin?role=seller" className="block">
                 <Button className="w-full" variant="default">
                   Sign in as Seller
                 </Button>
               </Link>
-              <Link href="/auth/signin?role=buyer" className="block">
+              <Link href="/api/auth/signin?role=buyer" className="block">
                 <Button className="w-full bg-transparent" variant="outline">
                   Sign in as Buyer
                 </Button>

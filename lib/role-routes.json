@@ -1,0 +1,10 @@
+{
+  "routes": {
+    "/seller/dashboard": "seller",
+    "/buyer/appointment": "buyer"
+  },
+  "defaultRedirects": {
+    "seller": "/seller/dashboard",
+    "buyer": "/buyer/appointment"
+  }
+}

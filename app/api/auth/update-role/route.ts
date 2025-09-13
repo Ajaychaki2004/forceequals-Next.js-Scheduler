@@ -1,8 +1,9 @@
-// @ts-ignore - Import authOptions from the NextAuth route
+// Import authOptions from the NextAuth route
 import { authOptions } from "../[...nextauth]/route"
 import { getServerSession } from "next-auth/next"
 import { NextResponse } from "next/server"
 import { MongoClient } from "mongodb"
+import { ExtendedSession, UserRole } from "@/types/auth"
 
 const client = new MongoClient(process.env.MONGODB_URI!)
 const clientPromise = client.connect()
@@ -10,7 +11,7 @@ const clientPromise = client.connect()
 export async function POST(request: Request) {
   // Check if user is authenticated
   // @ts-ignore - Ignore TypeScript errors with authOptions
-  const session = await getServerSession(authOptions)
+  const session = await getServerSession(authOptions) as ExtendedSession | null
   
   if (!session || !session.user?.email) {
     return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
 
   try {
     // Get the role from the request body
-    const { role } = await request.json()
+    const { role } = await request.json() as { role: UserRole }
     
     if (!role || (role !== "buyer" && role !== "seller")) {
       return new NextResponse(JSON.stringify({ error: "Invalid role" }), {
