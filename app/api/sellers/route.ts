@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next"
 import { Session } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { SellerModel } from "@/lib/models/seller"
+import { GoogleCalendarService } from "@/lib/google-calendar"
 
 export async function GET() {
   try {
@@ -17,13 +18,31 @@ export async function GET() {
     const sellers = await SellerModel.findAll()
     console.log(`Found ${sellers.length} sellers`)
 
-    // Remove sensitive data before sending to client
-    const publicSellers = sellers.map((seller) => ({
-      _id: seller._id,
-      name: seller.name,
-      email: seller.email,
-      isCalendarConnected: !!seller.refreshToken || !!seller.isCalendarConnected,
-    }))
+    // Process sellers to check calendar connection
+    const processedSellers = await Promise.all(
+      sellers.map(async (seller) => {
+        let isCalendarConnected = false
+        
+        // Only check connection if they have a refresh token
+        if (seller.refreshToken) {
+          try {
+            isCalendarConnected = await GoogleCalendarService.isCalendarConnected(seller.email)
+          } catch (error) {
+            console.error(`Error checking calendar connection for ${seller.email}:`, error)
+            isCalendarConnected = false
+          }
+        }
+        
+        return {
+          _id: seller._id,
+          name: seller.name,
+          email: seller.email,
+          isCalendarConnected,
+        }
+      })
+    )
+    
+    const publicSellers = processedSellers
 
     return NextResponse.json(publicSellers)
   } catch (error) {

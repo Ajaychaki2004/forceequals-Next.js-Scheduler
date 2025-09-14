@@ -39,11 +39,53 @@ export class SellerModel {
     const client = await clientPromise
     const db = client.db()
 
-    const seller = await db.collection("sellers").findOne({ email })
-    if (!seller) return null
+    // First try to find in sellers collection
+    let seller = await db.collection("sellers").findOne({ email })
+    
+    // If not found, check the users collection
+    if (!seller) {
+      console.log(`Seller ${email} not found in sellers collection, checking users collection`)
+      const user = await db.collection("users").findOne({ email, role: "seller" })
+      
+      if (user) {
+        console.log(`Found user with seller role: ${email}`)
+        // Transform user to match seller schema
+        seller = {
+          _id: user._id,
+          name: user.name || '',
+          email: user.email,
+          googleId: user.email.split('@')[0], // Create a placeholder googleId
+          role: "seller",
+          isCalendarConnected: !!user.refreshToken,
+          refreshToken: user.refreshToken || '',
+          createdAt: user.createdAt || new Date(),
+          updatedAt: user.updatedAt || new Date(),
+        }
+      } else {
+        console.log(`No seller or user with seller role found with email: ${email}`)
+        return null
+      }
+    }
 
-    // Decrypt refresh token
-    const decryptedRefreshToken = CryptoJS.AES.decrypt(seller.refreshToken, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8)
+    // Decrypt refresh token if it exists and is a string
+    let decryptedRefreshToken = ''
+    if (seller.refreshToken && typeof seller.refreshToken === 'string') {
+      try {
+        // Only decrypt if the seller is from the sellers collection
+        // Users from the users collection have unencrypted tokens
+        const isFromSellersCollection = !seller.hasOwnProperty('role'); 
+        
+        if (isFromSellersCollection) {
+          decryptedRefreshToken = CryptoJS.AES.decrypt(seller.refreshToken, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8)
+        } else {
+          console.log('Token from users collection, using as is')
+          decryptedRefreshToken = seller.refreshToken
+        }
+      } catch (error) {
+        console.log('Token appears not to be encrypted or invalid, using as is')
+        decryptedRefreshToken = seller.refreshToken
+      }
+    }
 
     return {
       ...seller,

@@ -20,8 +20,12 @@ export function AvailabilityPicker({ seller, onTimeSelect }: AvailabilityPickerP
     fetchAvailability()
   }, [selectedDate, seller])
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  
   const fetchAvailability = async () => {
     setLoading(true)
+    setErrorMessage(null)
+    
     try {
       const startDate = new Date(selectedDate)
       startDate.setHours(0, 0, 0, 0)
@@ -33,15 +37,23 @@ export function AvailabilityPicker({ seller, onTimeSelect }: AvailabilityPickerP
         `/api/calendar/availability?sellerEmail=${encodeURIComponent(seller.email)}&startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`,
       )
 
+      const data = await response.json()
+      
       if (response.ok) {
-        const data = await response.json()
         setAvailableSlots(data.availableSlots || [])
       } else {
-        console.error("Failed to fetch availability")
+        // Handle specific error cases
+        if (response.status === 404) {
+          setErrorMessage(data.message || "This seller hasn't connected their Google Calendar yet.")
+        } else {
+          setErrorMessage("Could not retrieve availability information.")
+        }
+        console.error("Failed to fetch availability:", data.error)
         setAvailableSlots([])
       }
     } catch (error) {
       console.error("Error fetching availability:", error)
+      setErrorMessage("An error occurred while fetching availability.")
       setAvailableSlots([])
     } finally {
       setLoading(false)
@@ -122,6 +134,12 @@ export function AvailabilityPicker({ seller, onTimeSelect }: AvailabilityPickerP
         <div className="text-center py-8">
           <Calendar className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
           <p className="text-muted-foreground">Cannot book appointments in the past</p>
+        </div>
+      ) : errorMessage ? (
+        <div className="text-center py-8">
+          <Calendar className="h-8 w-8 text-amber-500 mx-auto mb-3" />
+          <p className="text-foreground font-medium mb-1">Calendar Not Connected</p>
+          <p className="text-muted-foreground">{errorMessage}</p>
         </div>
       ) : availableSlots.length === 0 ? (
         <div className="text-center py-8">
