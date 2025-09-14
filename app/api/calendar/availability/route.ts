@@ -16,6 +16,16 @@ export async function GET(request: NextRequest) {
     const sellerEmail = searchParams.get("sellerEmail")
     const startDate = searchParams.get("startDate")
     const endDate = searchParams.get("endDate")
+    
+    // Optional parameters with defaults
+    const workdayStartParam = searchParams.get("workdayStart")
+    const workdayEndParam = searchParams.get("workdayEnd")
+    const appointmentDurationParam = searchParams.get("appointmentDuration")
+    
+    // Parse the optional parameters
+    const workdayStart = workdayStartParam ? parseInt(workdayStartParam, 10) : 9
+    const workdayEnd = workdayEndParam ? parseInt(workdayEndParam, 10) : 17
+    const appointmentDuration = appointmentDurationParam ? parseInt(appointmentDurationParam, 10) : 30
 
     if (!sellerEmail || !startDate || !endDate) {
       return NextResponse.json({ error: "Missing required parameters" }, { status: 400 })
@@ -40,14 +50,38 @@ export async function GET(request: NextRequest) {
     console.log(`Got ${busyTimes.length} busy periods for ${sellerEmail}`)
 
     // Generate available slots
+    const startDateObj = new Date(startDate);
+    const endDateObj = new Date(endDate);
+    
+    console.log(`Start date: ${startDateObj.toString()}`);
+    console.log(`End date: ${endDateObj.toString()}`);
+    
     const availableSlots = GoogleCalendarService.generateAvailableSlots(
       busyTimes,
-      new Date(startDate),
-      new Date(endDate),
+      startDateObj,
+      endDateObj,
+      appointmentDuration,
+      workdayStart,
+      workdayEnd
     )
     console.log(`Generated ${availableSlots.length} available slots for ${sellerEmail}`)
 
-    return NextResponse.json({ availableSlots, busyTimes })
+    return NextResponse.json({ 
+      availableSlots, 
+      busyTimes,
+      requestInfo: {
+        sellerEmail,
+        startDate: startDate,
+        endDate: endDate,
+        startDateFormatted: startDateObj.toString(),
+        endDateFormatted: endDateObj.toString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        serverTime: new Date().toString(),
+        workdayStart,
+        workdayEnd,
+        appointmentDuration
+      }
+    })
   } catch (error) {
     console.error("Error fetching availability:", error)
     

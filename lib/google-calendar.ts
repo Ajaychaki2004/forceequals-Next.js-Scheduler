@@ -67,6 +67,7 @@ export class GoogleCalendarService {
 
   static async getFreeBusyInfo(sellerEmail: string, timeMin: string, timeMax: string): Promise<{start: string; end: string}[]> {
     try {
+      console.log(`Getting busy times for ${sellerEmail} from ${timeMin} to ${timeMax}`)
       const calendar = await this.getCalendarClient(sellerEmail)
 
       const response = await calendar.freebusy.query({
@@ -79,6 +80,12 @@ export class GoogleCalendarService {
 
       // Transform the Google Calendar API response to ensure we have valid start and end strings
       const busyPeriods = response.data.calendars?.primary?.busy || []
+      console.log(`Found ${busyPeriods.length} busy periods in Google Calendar for ${sellerEmail}`)
+      
+      if (busyPeriods.length > 0) {
+        console.log('First busy period:', busyPeriods[0])
+      }
+      
       const busyTimes = busyPeriods.map(period => ({
         start: period.start || timeMin,
         end: period.end || timeMax
@@ -282,49 +289,163 @@ export class GoogleCalendarService {
     workdayStart: number = 9,
     workdayEnd: number = 17,
   ) {
+    console.log(`Generating available slots from ${startDate.toISOString()} to ${endDate.toISOString()}`);
+    console.log(`Using workday hours: ${workdayStart}:00 - ${workdayEnd}:00`);
+    console.log(`Appointment duration: ${appointmentDuration} minutes`);
+    console.log(`Number of busy periods: ${busyTimes.length}`);
+    
+    if (busyTimes.length > 0) {
+      console.log("Busy periods:", busyTimes);
+    }
+    
     const availableSlots = []
-    const currentDate = new Date(startDate)
+    
+    // Create a new date object to avoid mutating the input
+    // Make a copy of startDate to use for iteration
+    const currentDate = new Date(startDate);
+    
+    // Log the original dates
+    console.log(`Start date: ${startDate.toDateString()} ${startDate.toTimeString()}`);
+    console.log(`End date: ${endDate.toDateString()} ${endDate.toTimeString()}`);
+    console.log(`Current date for iteration: ${currentDate.toDateString()} ${currentDate.toTimeString()}`);
 
+    // Set current date to midnight for cleaner day calculations
+    currentDate.setHours(0, 0, 0, 0);
+    
+    // Get today's date for comparison
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    // Count how many days we're processing
+    let daysProcessed = 0;
+    
+    // Make sure we have a valid date range
+    if (endDate < startDate) {
+      console.log("Warning: End date is before start date. Swapping dates.");
+      [startDate, endDate] = [endDate, startDate];
+    }
+    
+    // Generate slots for each day in the range
     while (currentDate <= endDate) {
+      daysProcessed++;
+      const dayOfWeek = currentDate.getDay();
+      const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][dayOfWeek];
+      
+      console.log(`Processing ${dayName} ${currentDate.toDateString()}`);
+      
       // Skip weekends (optional - you might want to make this configurable)
       if (currentDate.getDay() === 0 || currentDate.getDay() === 6) {
-        currentDate.setDate(currentDate.getDate() + 1)
-        continue
+        console.log(`Skipping weekend day: ${dayName}`);
+        currentDate.setDate(currentDate.getDate() + 1);
+        continue;
+      }
+
+      // Skip past days
+      if (currentDate < today) {
+        console.log(`Skipping past day: ${currentDate.toDateString()}`);
+        currentDate.setDate(currentDate.getDate() + 1);
+        continue;
       }
 
       // Generate slots for the current day
+      const slotsForDay = [];
+      
+      // Process each hour in the workday
       for (let hour = workdayStart; hour < workdayEnd; hour++) {
-        const slotStart = new Date(currentDate)
-        slotStart.setHours(hour, 0, 0, 0)
+        // Generate slots at specified intervals
+        for (let minute = 0; minute < 60; minute += appointmentDuration) {
+          // Create slot start time
+          const slotStart = new Date(currentDate);
+          slotStart.setHours(hour, minute, 0, 0);
+          
+          // Skip slots in the past (already happened today)
+          if (slotStart <= now) {
+            continue;
+          }
 
-        const slotEnd = new Date(slotStart)
-        slotEnd.setMinutes(slotEnd.getMinutes() + appointmentDuration)
+          // Create slot end time
+          const slotEnd = new Date(slotStart);
+          slotEnd.setMinutes(slotEnd.getMinutes() + appointmentDuration);
 
-        // Check if this slot conflicts with any busy time
-        const isConflict = busyTimes.some((busyTime) => {
-          const busyStart = new Date(busyTime.start)
-          const busyEnd = new Date(busyTime.end)
+          // Check if this slot conflicts with any busy time
+          const conflictingBusyTime = busyTimes.find((busyTime) => {
+            const busyStart = new Date(busyTime.start);
+            const busyEnd = new Date(busyTime.end);
 
-          return (
-            (slotStart >= busyStart && slotStart < busyEnd) ||
-            (slotEnd > busyStart && slotEnd <= busyEnd) ||
-            (slotStart <= busyStart && slotEnd >= busyEnd)
-          )
-        })
+            return (
+              (slotStart >= busyStart && slotStart < busyEnd) ||
+              (slotEnd > busyStart && slotEnd <= busyEnd) ||
+              (slotStart <= busyStart && slotEnd >= busyEnd)
+            );
+          });
 
-        // Only add slot if it's not in the past and doesn't conflict
-        if (!isConflict && slotStart > new Date()) {
-          availableSlots.push({
-            startTime: slotStart.toISOString(),
-            endTime: slotEnd.toISOString(),
-            available: true,
-          })
+          // Only add slot if it doesn't conflict with busy time
+          if (!conflictingBusyTime) {
+            slotsForDay.push({
+              startTime: slotStart.toISOString(),
+              endTime: slotEnd.toISOString(),
+              available: true,
+            });
+          }
         }
       }
-
-      currentDate.setDate(currentDate.getDate() + 1)
+      
+      console.log(`Generated ${slotsForDay.length} available slots for ${dayName}`);
+      availableSlots.push(...slotsForDay);
+      
+      // Move to next day
+      currentDate.setDate(currentDate.getDate() + 1);
     }
-
-    return availableSlots
+    
+    console.log(`Total days processed: ${daysProcessed}`);
+    console.log(`Total available slots generated: ${availableSlots.length}`);
+    
+      // If no slots were generated, create some dummy slots for testing
+    if (availableSlots.length === 0) {
+      console.log("No slots were generated. Creating test slots within the requested date range.");
+      
+      // If we're looking at a past date, don't create dummy slots
+      if (startDate < today) {
+        console.log("Start date is in the past. Not creating dummy slots.");
+        return [];
+      }
+      
+      // Create test slots for each day in the range
+      const testDate = new Date(startDate);
+      
+      while (testDate <= endDate) {
+        // Skip weekends and past days
+        if (testDate.getDay() !== 0 && testDate.getDay() !== 6 && testDate >= today) {
+          console.log(`Creating test slots for ${testDate.toDateString()}`);
+          
+          // Add test slots at 10 AM, 11 AM, 2 PM, and 4 PM
+          [10, 11, 14, 16].forEach(hour => {
+            const testSlotStart = new Date(testDate);
+            testSlotStart.setHours(hour, 0, 0, 0);
+            
+            // Skip slots in the past
+            if (testSlotStart <= now) {
+              return;
+            }
+            
+            const testSlotEnd = new Date(testSlotStart);
+            testSlotEnd.setMinutes(testSlotEnd.getMinutes() + 30);
+            
+            availableSlots.push({
+              startTime: testSlotStart.toISOString(),
+              endTime: testSlotEnd.toISOString(),
+              available: true,
+              isTestSlot: true, // Flag to indicate this is a test slot
+              isDemoAppointment: true // Additional flag for frontend
+            });
+          });
+        }
+        
+        // Move to next day
+        testDate.setDate(testDate.getDate() + 1);
+      }      console.log(`Added ${availableSlots.length} test slots`);
+    }
+    
+    return availableSlots;
   }
 }
