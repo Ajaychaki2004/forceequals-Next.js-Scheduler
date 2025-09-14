@@ -9,6 +9,14 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  output: 'standalone',
+  poweredByHeader: false,
+  experimental: {
+    serverComponentsExternalPackages: [],
+    serverActions: {
+      bodySizeLimit: '2mb',
+    }
+  },
 }
 
 export default nextConfig
