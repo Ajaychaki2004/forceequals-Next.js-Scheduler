@@ -19,5 +19,6 @@
         "zeroConfig": true
       }
     }
-  ]
+  ],
+  "buildCommand": "npm run build"
 }

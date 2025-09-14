@@ -12,11 +12,16 @@ const nextConfig = {
   output: 'standalone',
   poweredByHeader: false,
   experimental: {
-    serverComponentsExternalPackages: [],
+    serverComponentsExternalPackages: ['@prisma/client'],
     serverActions: {
       bodySizeLimit: '2mb',
     }
   },
+  // Prevent issues with route groups in parentheses
+  transpilePackages: [],
+  webpack(config) {
+    return config;
+  }
 }
 
 export default nextConfig
