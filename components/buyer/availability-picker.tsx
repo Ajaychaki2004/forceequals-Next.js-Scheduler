@@ -15,121 +15,147 @@ export function AvailabilityPicker({ seller, onTimeSelect }: AvailabilityPickerP
   const [availableSlots, setAvailableSlots] = useState<any[]>([])
   const [selectedSlot, setSelectedSlot] = useState<any>(null)
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    fetchAvailability()
-  }, [selectedDate, seller])
-
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   
+  // Store available slots organized by date for quick lookup
+  const [slotsByDate, setSlotsByDate] = useState<{[dateKey: string]: any[]}>({})
+  // Keep track of all dates with available slots for navigation
+  const [availableDates, setAvailableDates] = useState<Date[]>([])
+  
+  // Fetch availability data when the component loads or seller changes
+  useEffect(() => {
+    fetchAvailability()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seller])
+  
+  // Update displayed slots when selected date changes
+  useEffect(() => {
+    updateSlotsForSelectedDate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDate])
+
+  // Fetch availability data from the API
   const fetchAvailability = async () => {
     setLoading(true)
     setErrorMessage(null)
     
     try {
-      // Get the full day
-      const startDate = new Date(selectedDate)
-      startDate.setHours(0, 0, 0, 0)
-
-      const endDate = new Date(selectedDate)
-      endDate.setHours(23, 59, 59, 999)
+      // Start with today
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
       
-      console.log(`Fetching availability for ${seller.name} (${seller.email}) on ${startDate.toDateString()}`)
-
-      // Fetch with a 3-day window to ensure we get enough slots if this day is fully booked
-      const extendedEndDate = new Date(endDate)
-      extendedEndDate.setDate(extendedEndDate.getDate() + 2) // Look ahead 2 more days
+      // End with 14 days later to get a good range
+      const twoWeeksLater = new Date(today)
+      twoWeeksLater.setDate(twoWeeksLater.getDate() + 14)
+      twoWeeksLater.setHours(23, 59, 59, 999)
+      
+      console.log(`Fetching availability for ${seller.name} (${seller.email}) from ${today.toDateString()} to ${twoWeeksLater.toDateString()}`)
       
       const response = await fetch(
-        `/api/calendar/availability?sellerEmail=${encodeURIComponent(seller.email)}&startDate=${startDate.toISOString()}&endDate=${extendedEndDate.toISOString()}&workdayStart=9&workdayEnd=18&appointmentDuration=30`,
+        `/api/calendar/availability?sellerEmail=${encodeURIComponent(seller.email)}&startDate=${today.toISOString()}&endDate=${twoWeeksLater.toISOString()}&workdayStart=9&workdayEnd=18&appointmentDuration=30`,
       )
-
+      
       const data = await response.json()
       console.log('Availability data:', data)
       
-      if (response.ok) {
-        // Filter slots for the selected date only - but also include test slots if there are no real slots
-        const allAvailableSlots = data.availableSlots || [];
-        console.log(`Total slots received from API: ${allAvailableSlots.length}`);
+      if (response.ok && data.availableSlots?.length > 0) {
+        // Organize slots by date
+        const slots = data.availableSlots || []
+        const dateMap: {[dateKey: string]: any[]} = {}
+        const dates: Date[] = []
         
-        // Filter for the selected date
-        const slotsForSelectedDate = allAvailableSlots.filter((slot: any) => {
-          const slotDate = new Date(slot.startTime);
-          return slotDate.toDateString() === selectedDate.toDateString();
-        });
+        // Process all slots and organize by date
+        slots.forEach((slot: any) => {
+          const slotDate = new Date(slot.startTime)
+          const dateKey = slotDate.toDateString()
+          
+          if (!dateMap[dateKey]) {
+            dateMap[dateKey] = []
+            dates.push(new Date(slotDate))
+          }
+          
+          dateMap[dateKey].push(slot)
+        })
         
-        console.log(`Found ${slotsForSelectedDate.length} slots for selected date out of ${allAvailableSlots.length} total slots`);
+        // Sort dates chronologically
+        dates.sort((a, b) => a.getTime() - b.getTime())
         
-        // If we have no slots for selected date but have test slots for other dates, let's also show them
-        if (slotsForSelectedDate.length === 0 && allAvailableSlots.some((slot: any) => slot.isTestSlot)) {
-          console.log("No slots for selected date but test slots exist - showing some test slots");
-          
-          // Create slots for the current selected date
-          const testSlots: {startTime: string, endTime: string, available: boolean, isTestSlot: boolean}[] = [];
-          const hours = [10, 11, 14, 16]; // 10 AM, 11 AM, 2 PM, 4 PM
-          
-          hours.forEach(hour => {
-            const slotStart = new Date(selectedDate);
-            slotStart.setHours(hour, 0, 0, 0);
-            
-            // Skip past slots
-            if (slotStart <= new Date()) {
-              return;
-            }
-            
-            const slotEnd = new Date(slotStart);
-            slotEnd.setMinutes(slotEnd.getMinutes() + 30);
-            
-            testSlots.push({
-              startTime: slotStart.toISOString(),
-              endTime: slotEnd.toISOString(),
-              available: true,
-              isTestSlot: true
-            });
-          });
-          
-          console.log(`Created ${testSlots.length} test slots for selected date`);
-          setAvailableSlots(testSlots);
+        setSlotsByDate(dateMap)
+        setAvailableDates(dates)
+        
+        // If we have dates with slots, select the first available date
+        if (dates.length > 0) {
+          // Use the first date with available slots or keep the selected date if it has slots
+          const currentDateKey = selectedDate.toDateString()
+          if (dateMap[currentDateKey]) {
+            // Keep current date selection but update the displayed slots
+            updateSlotsForDate(selectedDate)
+          } else {
+            // Switch to the first available date
+            setSelectedDate(dates[0])
+            updateSlotsForDate(dates[0])
+          }
         } else {
-          setAvailableSlots(slotsForSelectedDate);
-        }
-        
-        // Only set the error message if we actually have no slots to display
-        const hasSlots = slotsForSelectedDate.length > 0 || availableSlots.length > 0;
-        if (!hasSlots) {
-          setErrorMessage("No available times on this day. Please try another day.");
-        } else {
-          // Clear any error message if we have slots
-          setErrorMessage(null);
+          setErrorMessage("No available times found for this seller.")
         }
       } else {
-        // Handle specific error cases
+        // Handle cases where no slots are available
         if (response.status === 404) {
           setErrorMessage(data.message || "This seller hasn't connected their Google Calendar yet.")
+        } else if (!data.availableSlots || data.availableSlots.length === 0) {
+          setErrorMessage("No available appointment times found.")
         } else {
-          setErrorMessage(data.error || "Could not retrieve availability information.")
+          setErrorMessage("Could not retrieve availability information.")
         }
-        console.error("Failed to fetch availability:", data.error)
-        setAvailableSlots([])
       }
     } catch (error) {
       console.error("Error fetching availability:", error)
       setErrorMessage("An error occurred while fetching availability.")
-      setAvailableSlots([])
     } finally {
       setLoading(false)
     }
   }
-
-  const navigateDate = (direction: "prev" | "next") => {
-    const newDate = new Date(selectedDate)
-    if (direction === "prev") {
-      newDate.setDate(selectedDate.getDate() - 1)
+  
+  // Update the displayed slots for a specific date
+  const updateSlotsForDate = (date: Date) => {
+    const dateKey = date.toDateString()
+    const slotsForDate = slotsByDate[dateKey] || []
+    
+    setAvailableSlots(slotsForDate)
+    
+    if (slotsForDate.length === 0) {
+      setErrorMessage("No available times on this day. Please try another day.")
     } else {
-      newDate.setDate(selectedDate.getDate() + 1)
+      setErrorMessage(null)
     }
-    setSelectedDate(newDate)
+    
+    // Clear any selected slot when changing date
     setSelectedSlot(null)
+  }
+  
+  // Update slots for the currently selected date
+  const updateSlotsForSelectedDate = () => {
+    updateSlotsForDate(selectedDate)
+  }
+
+  // Navigate to a different date
+  const navigateDate = (direction: "prev" | "next") => {
+    const currentIndex = availableDates.findIndex(
+      date => date.toDateString() === selectedDate.toDateString()
+    )
+    
+    if (direction === "prev" && currentIndex > 0) {
+      // Navigate to previous available date
+      setSelectedDate(availableDates[currentIndex - 1])
+    } else if (direction === "next" && currentIndex < availableDates.length - 1) {
+      // Navigate to next available date
+      setSelectedDate(availableDates[currentIndex + 1])
+    } else if (availableDates.length > 0) {
+      // If we're at the boundaries or selected date isn't in the list,
+      // go to the first or last available date
+      const newDate = direction === "prev" ? availableDates[0] : availableDates[availableDates.length - 1]
+      setSelectedDate(newDate)
+    }
   }
 
   const handleSlotSelect = (slot: any) => {
@@ -162,8 +188,15 @@ export function AvailabilityPicker({ seller, onTimeSelect }: AvailabilityPickerP
     })
   }
 
+  // Check if selected date is today or in the past
   const isToday = selectedDate.toDateString() === new Date().toDateString()
   const isPast = selectedDate < new Date(new Date().setHours(0, 0, 0, 0))
+  
+  // Check if we can navigate to previous/next dates
+  const canGoBack = availableDates.length > 0 && 
+    availableDates[0].toDateString() !== selectedDate.toDateString()
+  const canGoForward = availableDates.length > 0 && 
+    availableDates[availableDates.length - 1].toDateString() !== selectedDate.toDateString()
 
   return (
     <div className="space-y-6">
@@ -176,10 +209,20 @@ export function AvailabilityPicker({ seller, onTimeSelect }: AvailabilityPickerP
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => navigateDate("prev")}>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => navigateDate("prev")}
+            disabled={!canGoBack}
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={() => navigateDate("next")}>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => navigateDate("next")}
+            disabled={!canGoForward}
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -207,7 +250,7 @@ export function AvailabilityPicker({ seller, onTimeSelect }: AvailabilityPickerP
               size="sm" 
               className="mt-4" 
               onClick={() => {
-                // Create test slots anyway
+                // Create demo slots for the selected date
                 const testSlots: {startTime: string, endTime: string, available: boolean, isTestSlot: boolean}[] = [];
                 const hours = [10, 11, 14, 16];
                 
