@@ -5,7 +5,16 @@ if (!process.env.MONGODB_URI) {
 }
 
 const uri = process.env.MONGODB_URI
-const options = {}
+const options = {
+  // Add SSL/TLS options to fix connection issues
+  ssl: true,
+  tls: true,
+  tlsAllowInvalidCertificates: true, // Only use in development, not recommended for production
+  tlsAllowInvalidHostnames: true,    // Only use in development, not recommended for production
+  retryWrites: true,
+  maxPoolSize: 10,
+  minPoolSize: 5
+}
 
 let client: MongoClient
 let clientPromise: Promise<MongoClient>

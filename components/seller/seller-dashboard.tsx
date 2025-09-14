@@ -25,26 +25,32 @@ export function SellerDashboard({ session }: SellerDashboardProps) {
   }, [])
 
   const fetchDashboardData = async () => {
-    try {
-      // Fetch appointments
-      const appointmentsRes = await fetch("/api/appointments")
-      if (appointmentsRes.ok) {
-        const appointmentsData = await appointmentsRes.json()
-        setAppointments(appointmentsData)
-      }
+  try {
+    const appointmentsRes = await fetch("/api/debug/appointments")
+    if (appointmentsRes.ok) {
+      const appointmentsData = await appointmentsRes.json()
 
-      // Check calendar connection status
-      const sellerRes = await fetch(`/api/sellers/${session.user.id}`)
-      if (sellerRes.ok) {
-        const sellerData = await sellerRes.json()
-        setIsCalendarConnected(sellerData.isCalendarConnected)
-      }
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error)
-    } finally {
-      setLoading(false)
+      // ✅ Extract only the appointments array
+      const extractedAppointments = Array.isArray(appointmentsData.appointments)
+        ? appointmentsData.appointments
+        : []
+
+      setAppointments(extractedAppointments)
     }
+
+    const sellerRes = await fetch(`/api/sellers/${session.user.id}`)
+    if (sellerRes.ok) {
+      const sellerData = await sellerRes.json()
+      setIsCalendarConnected(sellerData.isCalendarConnected)
+    }
+  } catch (error) {
+    console.error("Error fetching dashboard data:", error)
+  } finally {
+    setLoading(false)
   }
+}
+
+
 
   if (loading) {
     return (

@@ -39,7 +39,7 @@ export function AppointmentCard({ appointment, userRole, onUpdate, isPast = fals
   const handleStatusUpdate = async (newStatus: string) => {
     setIsUpdating(true)
     try {
-      const response = await fetch(`/api/appointments/${appointment._id}`, {
+      const response = await fetch(`/api/debug/appointments/${appointment._id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

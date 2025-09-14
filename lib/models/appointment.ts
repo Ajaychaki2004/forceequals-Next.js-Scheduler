@@ -45,15 +45,37 @@ export class AppointmentModel {
   static async findByBuyerId(buyerId: string): Promise<Appointment[]> {
     const client = await clientPromise
     const db = client.db()
-
-    return (await db.collection("appointments").find({ buyerId }).sort({ startTime: 1 }).toArray()) as Appointment[]
+    
+    // Try to handle both string ID and ObjectId formats by using $or operator
+    const query = {
+      $or: [
+        { buyerId },
+        { buyerId: buyerId.toString() },
+        // Try to convert to ObjectId if it's a valid format
+        ...(ObjectId.isValid(buyerId) ? [{ buyerId: new ObjectId(buyerId) }] : [])
+      ]
+    }
+    
+    console.log("Finding appointments for buyerId:", buyerId, "with query:", JSON.stringify(query))
+    return (await db.collection("appointments").find(query).sort({ startTime: 1 }).toArray()) as Appointment[]
   }
 
   static async findBySellerId(sellerId: string): Promise<Appointment[]> {
     const client = await clientPromise
     const db = client.db()
-
-    return (await db.collection("appointments").find({ sellerId }).sort({ startTime: 1 }).toArray()) as Appointment[]
+    
+    // Try to handle both string ID and ObjectId formats by using $or operator
+    const query = {
+      $or: [
+        { sellerId },
+        { sellerId: sellerId.toString() },
+        // Try to convert to ObjectId if it's a valid format
+        ...(ObjectId.isValid(sellerId) ? [{ sellerId: new ObjectId(sellerId) }] : [])
+      ]
+    }
+    
+    console.log("Finding appointments for sellerId:", sellerId, "with query:", JSON.stringify(query))
+    return (await db.collection("appointments").find(query).sort({ startTime: 1 }).toArray()) as Appointment[]
   }
 
   static async findByEventId(eventId: string): Promise<Appointment | null> {
@@ -89,11 +111,25 @@ export class AppointmentModel {
     const client = await clientPromise
     const db = client.db()
 
-    const query =
-      userRole === "buyer"
-        ? { buyerId: userId, startTime: { $gte: new Date() } }
-        : { sellerId: userId, startTime: { $gte: new Date() } }
-
+    // Build ID query with flexible matching for both string and ObjectId formats
+    const idQuery = {
+      $or: [
+        { [userRole === "buyer" ? "buyerId" : "sellerId"]: userId },
+        { [userRole === "buyer" ? "buyerId" : "sellerId"]: userId.toString() },
+        // Try to convert to ObjectId if it's a valid format
+        ...(ObjectId.isValid(userId) ? [{ [userRole === "buyer" ? "buyerId" : "sellerId"]: new ObjectId(userId) }] : [])
+      ]
+    }
+    
+    // Combine with date filter
+    const query = {
+      $and: [
+        idQuery,
+        { startTime: { $gte: new Date() } }
+      ]
+    }
+    
+    console.log(`Finding upcoming appointments for ${userRole} ID:`, userId, "with query:", JSON.stringify(query))
     return (await db.collection("appointments").find(query).sort({ startTime: 1 }).toArray()) as Appointment[]
   }
 }

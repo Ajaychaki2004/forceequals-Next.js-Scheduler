@@ -16,10 +16,11 @@ interface AppointmentsViewProps {
 }
 
 export function AppointmentsView({ session }: AppointmentsViewProps) {
-  const [appointments, setAppointments] = useState([])
-  const [filteredAppointments, setFilteredAppointments] = useState([])
+  const [appointments, setAppointments] = useState<any[]>([])
+  const [filteredAppointments, setFilteredAppointments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("upcoming")
+  const [apiResponse, setApiResponse] = useState<any>(null) // Store the complete API response
   const [filters, setFilters] = useState({
     status: "all",
     dateRange: "all",
@@ -31,24 +32,61 @@ export function AppointmentsView({ session }: AppointmentsViewProps) {
   }, [])
 
   useEffect(() => {
-    applyFilters()
+    try {
+      applyFilters()
+    } catch (error) {
+      console.error("Error applying filters:", error)
+      setFilteredAppointments([]) // Set to empty array on error
+    }
   }, [appointments, filters, activeTab])
 
   const fetchAppointments = async () => {
     try {
-      const response = await fetch("/api/appointments")
+      const response = await fetch("/api/debug/appointments")
       if (response.ok) {
-        const appointmentsData = await response.json()
-        setAppointments(appointmentsData)
+        const data = await response.json()
+        console.log("Appointments API response:", data)
+        setApiResponse(data)
+        
+        // ALWAYS store complete raw API response for debugging
+        console.log("Raw API response stored:", data)
+        
+        // Handle both array response and object response with appointments array
+        if (Array.isArray(data)) {
+          console.log("Data is an array with length:", data.length)
+          setAppointments(data)
+        } else if (data && Array.isArray(data.appointments)) {
+          console.log("Data contains appointments array with length:", data.appointments.length)
+          setAppointments(data.appointments)
+          
+          // Log diagnostic information if available
+          if (data.diagnostics) {
+            console.log("Appointments API diagnostics:", data.diagnostics)
+          }
+        } else {
+          console.error("Unexpected response format - setting empty array:", data)
+          setAppointments([])
+        }
+      } else {
+        console.error("Error fetching appointments:", response.status)
+        setAppointments([])
       }
     } catch (error) {
       console.error("Error fetching appointments:", error)
+      setAppointments([])
     } finally {
       setLoading(false)
     }
   }
 
   const applyFilters = () => {
+    // Ensure we're working with an array
+    if (!Array.isArray(appointments)) {
+      console.error("Appointments is not an array:", appointments)
+      setFilteredAppointments([])
+      return
+    }
+    
     let filtered = [...appointments]
     const now = new Date()
 
@@ -110,13 +148,28 @@ export function AppointmentsView({ session }: AppointmentsViewProps) {
   }
 
   const getAppointmentStats = () => {
-    const now = new Date()
-    const upcoming = appointments.filter((apt: any) => new Date(apt.startTime) >= now)
-    const past = appointments.filter((apt: any) => new Date(apt.startTime) < now)
-    const completed = appointments.filter((apt: any) => apt.status === "completed")
-    const cancelled = appointments.filter((apt: any) => apt.status === "cancelled")
+    // Ensure appointments is an array
+    if (!Array.isArray(appointments)) {
+      return { upcoming: 0, past: 0, completed: 0, cancelled: 0 }
+    }
+    
+    try {
+      const now = new Date()
+      const upcoming = appointments.filter((apt: any) => new Date(apt.startTime) >= now)
+      const past = appointments.filter((apt: any) => new Date(apt.startTime) < now)
+      const completed = appointments.filter((apt: any) => apt.status === "completed")
+      const cancelled = appointments.filter((apt: any) => apt.status === "cancelled")
 
-    return { upcoming: upcoming.length, past: past.length, completed: completed.length, cancelled: cancelled.length }
+      return { 
+        upcoming: upcoming.length, 
+        past: past.length, 
+        completed: completed.length, 
+        cancelled: cancelled.length 
+      }
+    } catch (error) {
+      console.error("Error calculating appointment stats:", error)
+      return { upcoming: 0, past: 0, completed: 0, cancelled: 0 }
+    }
   }
 
   if (loading) {

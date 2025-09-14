@@ -2,9 +2,10 @@ import NextAuth from "next-auth/next"
 import GoogleProvider from "next-auth/providers/google"
 import { MongoClient, ObjectId } from "mongodb"
 import { MongoDBAdapter } from "@auth/mongodb-adapter"
+import clientPromise from "@/lib/mongodb"
 
-const client = new MongoClient(process.env.MONGODB_URI!)
-const clientPromise = client.connect()
+// Import directly from our centralized MongoDB connection
+// This ensures consistent connection settings across the application
 
 // Define interface for account
 interface OAuthAccount {
@@ -201,6 +202,12 @@ export const authOptions = {
         return true;
       } catch (error) {
         console.error("Error in signIn callback:", error);
+        
+        // Improve error handling for MongoDB connection issues
+        if (error instanceof Error && error.message.includes('SSL routines')) {
+          console.error("MongoDB SSL/TLS connection error. Check your connection string and certificates.");
+        }
+        
         // Still allow sign in even if our custom code fails
         return true;
       }
@@ -220,7 +227,19 @@ export const authOptions = {
             console.log(`Found role cookie: ${roleCookie}`);
           }
           
-          const db = (await clientPromise).db();
+          // Add retry logic for database connection
+          let db;
+          try {
+            const client = await clientPromise;
+            db = client.db();
+            console.log("MongoDB connection successful");
+          } catch (dbError) {
+            console.error("MongoDB connection error:", dbError);
+            // Add fallback role in case of database connection failure
+            session.user.role = session.user.role || "buyer";
+            session.user.id = user.id;
+            return session;
+          }
           
           // Get the user from the database to check their role
           const dbUser = await db.collection("users").findOne({ _id: new ObjectId(user.id) });

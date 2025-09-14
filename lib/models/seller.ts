@@ -96,17 +96,67 @@ export class SellerModel {
   static async findById(id: string): Promise<Seller | null> {
     const client = await clientPromise
     const db = client.db()
-
-    const seller = await db.collection("sellers").findOne({ _id: new ObjectId(id) })
-    if (!seller) return null
-
-    // Decrypt refresh token
-    const decryptedRefreshToken = CryptoJS.AES.decrypt(seller.refreshToken, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8)
-
-    return {
-      ...seller,
-      refreshToken: decryptedRefreshToken,
-    } as Seller
+    
+    console.log(`Finding seller by ID: ${id}`)
+    
+    try {
+      // Check if id is a valid ObjectId
+      if (!ObjectId.isValid(id)) {
+        console.log(`Invalid ObjectId format: ${id}`)
+        return null
+      }
+      
+      // First try to find in sellers collection
+      let seller = await db.collection("sellers").findOne({ _id: new ObjectId(id) })
+      
+      // If not found, check the users collection
+      if (!seller) {
+        console.log(`Seller with ID ${id} not found in sellers collection, checking users collection`)
+        seller = await db.collection("users").findOne({ _id: new ObjectId(id), role: "seller" })
+        
+        if (seller) {
+          console.log(`Found user with seller role with ID: ${id}`)
+          // Transform user to match seller schema
+          seller = {
+            ...seller,
+            googleId: seller.email.split('@')[0], // Create a placeholder googleId
+            role: "seller",
+            isCalendarConnected: !!seller.refreshToken
+          }
+        } else {
+          console.log(`No seller or user with seller role found with ID: ${id}`)
+          return null
+        }
+      }
+      
+      // Decrypt refresh token if it exists
+      let decryptedRefreshToken = '';
+      if (seller.refreshToken && typeof seller.refreshToken === 'string') {
+        try {
+          // Only decrypt if the seller is from the sellers collection
+          const isFromSellersCollection = !seller.hasOwnProperty('role');
+          
+          if (isFromSellersCollection) {
+            decryptedRefreshToken = CryptoJS.AES.decrypt(seller.refreshToken, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8)
+          } else {
+            decryptedRefreshToken = seller.refreshToken;
+          }
+        } catch (error) {
+          console.log('Error decrypting token:', error)
+          // Keep the token as is if decryption fails
+          decryptedRefreshToken = seller.refreshToken;
+        }
+      }
+      
+      return {
+        ...seller,
+        refreshToken: decryptedRefreshToken
+      } as Seller;
+      
+    } catch (error) {
+      console.error(`Error finding seller by ID ${id}:`, error)
+      return null
+    }
   }
 
   static async findAll(): Promise<Seller[]> {
