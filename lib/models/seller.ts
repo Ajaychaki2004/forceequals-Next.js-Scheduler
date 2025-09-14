@@ -71,11 +71,34 @@ export class SellerModel {
     const client = await clientPromise
     const db = client.db()
 
-    const sellers = await db.collection("sellers").find({ role: "seller" }).toArray()
+    // First try to find in the sellers collection
+    let sellers = await db.collection("sellers").find({ role: "seller" }).toArray()
+    
+    // If no sellers found, look in the users collection
+    if (sellers.length === 0) {
+      console.log("No sellers found in sellers collection, checking users collection")
+      const userSellers = await db.collection("users").find({ role: "seller" }).toArray()
+      
+      // Transform users to match seller schema as much as possible
+      sellers = userSellers.map(user => ({
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        googleId: user.email.split('@')[0], // Create a placeholder googleId
+        role: "seller",
+        isCalendarConnected: !!user.refreshToken, // Assume connected if has a token
+        refreshToken: user.refreshToken || "",
+        createdAt: user.createdAt || new Date(),
+        updatedAt: user.updatedAt || new Date(),
+      }))
+    }
 
+    // Decrypt refresh tokens if they exist
     return sellers.map((seller) => ({
       ...seller,
-      refreshToken: CryptoJS.AES.decrypt(seller.refreshToken, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8),
+      refreshToken: seller.refreshToken && typeof seller.refreshToken === 'string' ? 
+        CryptoJS.AES.decrypt(seller.refreshToken, ENCRYPTION_KEY).toString(CryptoJS.enc.Utf8) : 
+        "",
     })) as Seller[]
   }
 

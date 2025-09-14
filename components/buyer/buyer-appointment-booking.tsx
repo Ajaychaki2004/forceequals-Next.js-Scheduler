@@ -31,7 +31,16 @@ export function BuyerAppointmentBooking({ session }: BuyerAppointmentBookingProp
       const response = await fetch("/api/sellers")
       if (response.ok) {
         const sellersData = await response.json()
-        setSellers(sellersData.filter((seller: any) => seller.isCalendarConnected))
+        console.log("Sellers data:", sellersData)
+        
+        // Display all sellers for now, even without connected calendars
+        // since we're still in development
+        setSellers(sellersData)
+        
+        // Once we're ready to filter by calendar connection, use this:
+        // setSellers(sellersData.filter((seller: any) => seller.isCalendarConnected))
+      } else {
+        console.error("Failed to fetch sellers:", response.status)
       }
     } catch (error) {
       console.error("Error fetching sellers:", error)

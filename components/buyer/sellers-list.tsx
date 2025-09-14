@@ -51,8 +51,8 @@ export function SellersList({ sellers, onSellerSelect }: SellersListProps) {
               </div>
             </div>
 
-            <Button onClick={() => onSellerSelect(seller)} className="w-full" disabled={!seller.isCalendarConnected}>
-              {seller.isCalendarConnected ? "Book Appointment" : "Unavailable"}
+            <Button onClick={() => onSellerSelect(seller)} className="w-full">
+              Book Appointment
             </Button>
           </CardContent>
         </Card>

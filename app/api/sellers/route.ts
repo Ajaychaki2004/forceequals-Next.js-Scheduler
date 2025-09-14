@@ -1,24 +1,28 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
+import { Session } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { SellerModel } from "@/lib/models/seller"
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions)
+    // @ts-ignore - Type issues with NextAuth session
+    const session = await getServerSession(authOptions) as Session | null
 
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    console.log("Fetching sellers for user:", session.user?.email)
     const sellers = await SellerModel.findAll()
+    console.log(`Found ${sellers.length} sellers`)
 
     // Remove sensitive data before sending to client
     const publicSellers = sellers.map((seller) => ({
       _id: seller._id,
       name: seller.name,
       email: seller.email,
-      isCalendarConnected: seller.isCalendarConnected,
+      isCalendarConnected: !!seller.refreshToken || !!seller.isCalendarConnected,
     }))
 
     return NextResponse.json(publicSellers)
@@ -30,9 +34,10 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions)
+    // @ts-ignore - Type issues with NextAuth session
+    const session = await getServerSession(authOptions) as Session | null
 
-    if (!session || session.user.role !== "seller") {
+    if (!session || !session.user || session.user.role !== "seller") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
