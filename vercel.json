@@ -10,15 +10,5 @@
       "destination": "/api/$1"
     }
   ],
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/next",
-      "config": {
-        "skipBuildCache": true,
-        "zeroConfig": true
-      }
-    }
-  ],
   "buildCommand": "npm run build"
 }
