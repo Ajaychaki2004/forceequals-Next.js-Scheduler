@@ -9,13 +9,16 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  output: 'standalone',
   poweredByHeader: false,
+  serverExternalPackages: ['@prisma/client'],
+  outputFileTracingRoot: process.cwd(),
+  outputFileTracingExcludes: {
+    '/*': ['**/*_client-reference-manifest.js']
+  },
   experimental: {
-    serverComponentsExternalPackages: ['@prisma/client'],
     serverActions: {
       bodySizeLimit: '2mb',
-    }
+    },
   },
   // Prevent issues with route groups in parentheses
   transpilePackages: [],
